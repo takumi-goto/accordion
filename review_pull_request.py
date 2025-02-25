@@ -26,7 +26,7 @@ def get_installation_id():
     """指定したリポジトリの Installation ID を取得"""
     jwt_token = generate_jwt()
     headers = {"Authorization": f"Bearer {jwt_token}", "Accept": "application/vnd.github.v3+json"}
-    
+
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/installation"
     response = requests.get(url, headers=headers)
 

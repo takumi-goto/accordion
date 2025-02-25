@@ -20,7 +20,7 @@ jobs:
 
       - name: Use AI Review Bot
         uses: your-org/review-bot@main
-        with:
+        env:
           GITHUB_PRIVATE_KEY: ${{ secrets.GITHUB_PRIVATE_KEY }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
