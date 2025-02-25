@@ -1,0 +1,38 @@
+name: "AI PR Review Bot"
+description: "Automatically reviews pull requests using AI models like ChatGPT or Gemini."
+author: "Your Name"
+
+inputs:
+  GITHUB_REPOSITORY_OWNER:
+    description: "GitHub repository owner"
+    required: true
+  GITHUB_REPOSITORY_NAME:
+    description: "GitHub repository name"
+    required: true
+  GITHUB_PR_NUMBER:
+    description: "Pull request number"
+    required: true
+  AI_MODEL:
+    description: "AI model to use (chatgpt-4o-latest or gemini)"
+    required: true
+  OPENAI_API_TOKEN:
+    description: "OpenAI API token"
+    required: true
+  GEMINI_API_TOKEN:
+    description: "Gemini API token"
+    required: false
+  REVIEW_PROMPT:
+    description: "Custom AI review prompt"
+    required: false
+
+runs:
+  using: "docker"
+  image: "Dockerfile"
+  env:
+    GITHUB_REPOSITORY_OWNER: ${{ inputs.GITHUB_REPOSITORY_OWNER }}
+    GITHUB_REPOSITORY_NAME: ${{ inputs.GITHUB_REPOSITORY_NAME }}
+    GITHUB_PR_NUMBER: ${{ inputs.GITHUB_PR_NUMBER }}
+    AI_MODEL: ${{ inputs.AI_MODEL }}
+    OPENAI_API_TOKEN: ${{ inputs.OPENAI_API_TOKEN }}
+    GEMINI_API_TOKEN: ${{ inputs.GEMINI_API_TOKEN }}
+    REVIEW_PROMPT: ${{ inputs.REVIEW_PROMPT }}
