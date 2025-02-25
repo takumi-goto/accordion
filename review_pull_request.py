@@ -1,7 +1,7 @@
 import os
 import requests
 
-# 環境変数から取得
+# 環境変数の取得
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPO_OWNER = os.getenv("GITHUB_REPOSITORY_OWNER")
 REPO_NAME = os.getenv("GITHUB_REPOSITORY_NAME")
@@ -18,107 +18,91 @@ HEADERS = {
     "Accept": "application/vnd.github.v3+json"
 }
 
-def fetch_all_comments():
-    """PR のすべてのコメントを取得"""
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{PR_NUMBER}/comments"
-    response = requests.get(url, headers=HEADERS)
+print(f"🔥 [DEBUG] 環境変数確認")
+print(f"  - GITHUB_REPOSITORY_OWNER: {REPO_OWNER}")
+print(f"  - GITHUB_REPOSITORY_NAME: {REPO_NAME}")
+print(f"  - PR_NUMBER: {PR_NUMBER}")
+print(f"  - PR_COMMENT_BODY: {PR_COMMENT_BODY}")
+print(f"  - PR_COMMENT_ID: {PR_COMMENT_ID}")
+print(f"  - PR_COMMENT_USER: {PR_COMMENT_USER}")
 
-    if response.status_code == 200:
-        return response.json()
+if not PR_COMMENT_BODY or not PR_COMMENT_ID or not PR_COMMENT_USER:
+    print("⚠️ [WARNING] コメントが取得できませんでした。スクリプトを終了します。")
+    exit(1)
 
-    raise Exception(f"Error fetching PR comments: {response.status_code} - {response.text}")
+if "chatgpt" in PR_COMMENT_USER.lower() or "gemini" in PR_COMMENT_USER.lower():
+    print(f"🛑 [INFO] AI のコメントには返信しません。 ({PR_COMMENT_USER})")
+    exit(0)
 
-def format_conversation(comments):
-    """AI に渡すためのコメント履歴をフォーマット"""
-    conversation = []
-    for comment in comments:
-        user = comment["user"]["login"]
-        body = comment["body"]
-        conversation.append(f"{user}: {body}")
-
-    return "\n".join(conversation)
-
-def ai_models():
-    """AI モデルの設定"""
-    return {
+def ai_reply(message):
+    """AI を使用して返信を生成"""
+    ai_models = {
         "chatgpt-4o-latest": {
-            "model": "chatgpt-4o-latest",
             "api_url": "https://api.openai.com/v1/chat/completions",
             "api_token": OPENAI_API_TOKEN,
             "headers": {"Authorization": f"Bearer {OPENAI_API_TOKEN}", "Content-Type": "application/json"},
-            "payload": lambda message, context: {
+            "payload": {
                 "model": "chatgpt-4o-latest",
                 "messages": [
                     {"role": "system", "content": "あなたはコードレビューを担当する AI です。"},
-                    {"role": "user", "content": f"以下の会話履歴を考慮して、最新のメッセージに返信してください:\n\n{context}\n\n【新しいコメント】\n{message}"}
+                    {"role": "user", "content": f"以下のメッセージに返信してください:\n\n{message}"}
                 ]
             }
         },
         "gemini": {
-            "model": "gemini-2.0-flash",
             "api_url": "https://generativelanguage.googleapis.com/v1/models/gemini:generateText",
             "api_token": GEMINI_API_TOKEN,
             "headers": {"Authorization": f"Bearer {GEMINI_API_TOKEN}", "Content-Type": "application/json"},
-            "payload": lambda message, context: {
-                "prompt": f"あなたはコードレビューを担当する AI です。\n\n以下の会話履歴を考慮して、最新のメッセージに返信してください:\n\n{context}\n\n【新しいコメント】\n{message}",
-                "maxTokens": 1024
-            }
+            "payload": {"prompt": f"以下のメッセージに返信してください:\n\n{message}", "maxTokens": 1024}
         }
     }
 
-def ai_reply(message, context):
-    """AI を使用して返信を生成"""
-    models = ai_models()
-    if AI_MODEL not in models:
-        raise ValueError(f"Unknown AI model: {AI_MODEL}")
+    if AI_MODEL not in ai_models:
+        raise ValueError(f"🚨 [ERROR] Unknown AI model: {AI_MODEL}")
 
-    model_info = models[AI_MODEL]
+    model_info = ai_models[AI_MODEL]
+    print(f"🔍 [DEBUG] {AI_MODEL} にリクエスト送信中...")
+
     response = requests.post(
         model_info["api_url"],
         headers=model_info["headers"],
-        json=model_info["payload"](message, context)
+        json=model_info["payload"]
     )
 
     if response.status_code == 200:
+        print("✅ [DEBUG] AI からの応答を受信")
         if AI_MODEL == "chatgpt-4o-latest":
             return response.json()["choices"][0]["message"]["content"]
         elif AI_MODEL == "gemini":
             return response.json()["candidates"][0]["output"]
-
-    raise Exception(f"Error from {AI_MODEL} API: {response.status_code} - {response.text}")
+    else:
+        print(f"❌ [ERROR] AI API リクエスト失敗: {response.status_code} - {response.text}")
+        return None
 
 def post_reply():
     """PR のコメントに AI が返信"""
-    if not PR_COMMENT_BODY or not PR_COMMENT_ID or not PR_COMMENT_USER:
-        print("No new comment detected.")
+    print(f"💬 [INFO] {PR_COMMENT_USER} のコメントに返信中: {PR_COMMENT_BODY}")
+
+    ai_response = ai_reply(PR_COMMENT_BODY)
+    if not ai_response:
+        print("⚠️ [WARNING] AI の応答が取得できませんでした。スクリプトを終了します。")
         return
 
-    # AI のコメントには返信しない
-    if "chatgpt" in PR_COMMENT_USER.lower() or "gemini" in PR_COMMENT_USER.lower():
-        print(f"Skipping AI comment from {PR_COMMENT_USER}")
-        return
+    print(f"📝 [INFO] AI の返信内容:\n{ai_response}")
 
-    print(f"Replying to {PR_COMMENT_USER}: {PR_COMMENT_BODY}")
-
-    # すべての過去コメントを取得し、コンテキストとして AI に渡す
-    comments = fetch_all_comments()
-    conversation_context = format_conversation(comments)
-
-    # AI で返信を生成
-    reply_text = ai_reply(PR_COMMENT_BODY, conversation_context)
-
-    # GitHub に返信を投稿
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/comments/{PR_COMMENT_ID}/replies"
-    data = {"body": reply_text}
+    data = {"body": ai_response}
 
+    print("📡 [DEBUG] GitHub へコメント投稿中...")
     response = requests.post(url, headers=HEADERS, json=data)
+
     if response.status_code == 201:
-        print(f"Replied to {PR_COMMENT_USER}: {reply_text}")
+        print(f"✅ [SUCCESS] GitHub に返信を投稿しました: {ai_response}")
     else:
-        print(f"Error posting reply: {response.text}")
+        print(f"❌ [ERROR] GitHub への投稿失敗: {response.status_code} - {response.text}")
 
 if __name__ == "__main__":
     try:
         post_reply()
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"❌ [ERROR] スクリプト実行中にエラーが発生しました: {e}")
