@@ -1,6 +1,7 @@
 import os
 import requests
 import jwt
+from jwt import encode
 import time
 
 # 環境変数から取得

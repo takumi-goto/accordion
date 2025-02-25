@@ -1,2 +1,2 @@
-jwt
+PyJWT
 requests
