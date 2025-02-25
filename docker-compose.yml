@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  review-bot:
+    build: .
+    container_name: review-bot
+    environment:
+      GITHUB_APP_ID: "${GITHUB_APP_ID}"
+      GITHUB_PRIVATE_KEY: "${GITHUB_PRIVATE_KEY}"
+      GITHUB_REPOSITORY_OWNER: "${GITHUB_REPOSITORY_OWNER}"
+      GITHUB_REPOSITORY_NAME: "${GITHUB_REPOSITORY_NAME}"
+      GITHUB_PR_NUMBER: "${GITHUB_PR_NUMBER}"
+      AI_MODEL: "${AI_MODEL}"
+      OPENAI_API_TOKEN: "${OPENAI_API_TOKEN}"
+      GEMINI_API_TOKEN: "${GEMINI_API_TOKEN}"
+      REVIEW_PROMPT: "${REVIEW_PROMPT}"
+    volumes:
+      - .:/app
+    command: ["sh", "/app/entrypoint.sh"]
