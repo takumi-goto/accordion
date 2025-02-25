@@ -1,6 +1,5 @@
 import os
 import requests
-import time
 
 # 環境変数から取得
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -10,21 +9,23 @@ PR_NUMBER = os.getenv("GITHUB_PR_NUMBER")
 AI_MODEL = os.getenv("AI_MODEL", "chatgpt-4o-latest")
 OPENAI_API_TOKEN = os.getenv("OPENAI_API_TOKEN")
 GEMINI_API_TOKEN = os.getenv("GEMINI_API_TOKEN")
-REVIEW_PROMPT = os.getenv("REVIEW_PROMPT", "コードレビューをしてください。")
 
 HEADERS = {
     "Authorization": f"token {GITHUB_TOKEN}",
     "Accept": "application/vnd.github.v3+json"
 }
 
-def fetch_pr_comments():
-    """PR に投稿されたコメントを取得"""
+def fetch_latest_comment():
+    """PR に投稿された最新のコメントを取得"""
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{PR_NUMBER}/comments"
     response = requests.get(url, headers=HEADERS)
 
     if response.status_code == 200:
-        return response.json()
-
+        comments = response.json()
+        if comments:
+            return comments[-1]  # 最新のコメントを返す
+        return None
+    
     raise Exception(f"Error fetching PR comments: {response.status_code} - {response.text}")
 
 def ai_models():
@@ -73,55 +74,41 @@ def ai_reply(message):
             return response.json()["choices"][0]["message"]["content"]
         elif AI_MODEL == "gemini":
             return response.json()["candidates"][0]["output"]
-
+    
     raise Exception(f"Error from {AI_MODEL} API: {response.status_code} - {response.text}")
 
-def reply_to_comments():
-    """PR の AI コメントに対する返信を監視し、AI も返信する"""
-    processed_comments = set()  # 既に返信したコメントを管理
+def post_reply():
+    """PR の最新のコメントに AI が返信"""
+    latest_comment = fetch_latest_comment()
+    if not latest_comment:
+        print("No new comments detected.")
+        return
 
-    while True:
-        try:
-            comments = fetch_pr_comments()
+    comment_body = latest_comment["body"]
+    comment_id = latest_comment["id"]
+    comment_user = latest_comment["user"]["login"]
 
-            for comment in comments:
-                comment_id = comment["id"]
-                comment_body = comment["body"]
-                user = comment["user"]["login"]
+    # AI のコメントには返信しない
+    if "chatgpt" in comment_user.lower() or "gemini" in comment_user.lower():
+        print(f"Skipping AI comment from {comment_user}")
+        return
 
-                # AI のコメントかどうかを判定（適当なフラグを追加できる）
-                if "chatgpt" in user.lower() or "gemini" in user.lower():
-                    continue  # AI のコメントには返信しない
+    print(f"Replying to {comment_user}: {comment_body}")
 
-                # すでに処理済みならスキップ
-                if comment_id in processed_comments:
-                    continue
+    reply_text = ai_reply(comment_body)
 
-                print(f"Replying to: {comment_body}")
+    # GitHub に返信を投稿
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/comments/{comment_id}/replies"
+    data = {"body": reply_text}
 
-                # AI で返信を生成
-                reply_text = ai_reply(comment_body)
-
-                # GitHub に返信を投稿
-                url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/comments/{comment_id}/replies"
-                data = {"body": reply_text}
-
-                response = requests.post(url, headers=HEADERS, json=data)
-                if response.status_code == 201:
-                    print(f"Replied: {reply_text}")
-                    processed_comments.add(comment_id)
-                else:
-                    print(f"Error posting reply: {response.text}")
-
-        except Exception as e:
-            print(f"Error: {e}")
-
-        time.sleep(30)  # 30秒ごとにチェック
+    response = requests.post(url, headers=HEADERS, json=data)
+    if response.status_code == 201:
+        print(f"Replied to {comment_user}: {reply_text}")
+    else:
+        print(f"Error posting reply: {response.text}")
 
 if __name__ == "__main__":
     try:
-        # PR のコメントを監視して AI が返信
-        reply_to_comments()
-
+        post_reply()
     except Exception as e:
         print(f"Error: {e}")
